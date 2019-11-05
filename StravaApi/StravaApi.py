@@ -2,6 +2,8 @@ import requests
 import datetime
 from requests_oauthlib import OAuth2Session
 import yaml
+import logging
+import time
 
 class StravaApi:
 
@@ -73,31 +75,35 @@ class StravaApi:
         url = self.baseUrl + '/athlete'
         return self.get(url)
 
-    def uploadActivity(self, file, name, description, trainer, commute, data_type, externalId):
+    def uploadActivity(self, file, name, description, activity_type, trainer=0, commute=0, data_type='gpx', externalId=0):
         url = self.baseUrl + "/uploads"
-        payload = {
-                      'file@': file
-                    , 'name' : name
-                    , 'description' : description
-                    , 'trainer' : trainer
-                    , 'commute' : commute
-                    , 'data_type' : data_type
-                    , 'external_id' : externalId
-                  }
+        payload = {'activity_type' : activity_type, 'data_type' : data_type}
+        currentHeader = {"Authorization": "Bearer " + self.token['access_token']}
 
-        files = {'upload_file': file}
-        return self.post(url, payload, files)
+        with open(file, 'rb') as f:
+            files = {'file' : f}
+            result = self.oath.request('POST', url, headers=currentHeader, data=payload, files=files)
+
+        return result.json()["id"]
+
+    def getUploadStatus(self, id):
+        url = self.baseUrl + "/uploads/" + str(id)
+        response = self.get(url)
+        return response
 
 
 
 def main():
     api = StravaApi()
-    currentTime = datetime.datetime.now().isoformat()
-   # result = api.createActivity("Script Test", "Run", currentTime, 150, 5000, "Testing out the Strava API")
-    filePath = "c:/Users/antonn/source/repos/StravaApiRepo/2014-03-10-173741.gpx"
-    uploadRes = api.uploadActivity(open(filePath, 'rb'), "2014-03-10-173741", "First test of uploading gpx file", "0", "0", "gpx", "0")
-    a = "a"
+    filePath = "c:/Users/antonn/source/repos/StravaApiRepo/2014-03-18-174929.gpx"
+    uploadResId = api.uploadActivity(filePath, "Test", "First test of uploading gpx file", "run", data_type='gpx')
 
+    response = api.getUploadStatus(uploadResId).json()
+    while(response['status'] != "Your activity is ready."):
+        time.sleep(3)
+        response = api.getUploadStatus(uploadResId).json()
+        print(response)
+        print('\n\r')
 
 if __name__ == "__main__":
     main()

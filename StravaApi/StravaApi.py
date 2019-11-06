@@ -1,9 +1,9 @@
 import requests
-import datetime
 from requests_oauthlib import OAuth2Session
 import yaml
-import logging
 import time
+import os
+import xmltodict
 
 class StravaApi:
 
@@ -11,9 +11,10 @@ class StravaApi:
         self.baseUrl = 'https://www.strava.com/api/v3'
         self.clientId = 0
         self.clientSecret = ''
+        self.directory = ''
         self.readConfig()
-        self.oath = OAuth2Session(self.clientId, redirect_uri='https://localhost/test', scope='activity:read,activity:write')
-        self.token = self.authorize(self.oath)
+        self.oauth = OAuth2Session(self.clientId, redirect_uri='https://localhost/test', scope='activity:read,activity:write')
+        self.token = self.authorize(self.oauth)
         self.headers = {"Authorization": "Bearer " + self.token['access_token']}
 
 
@@ -27,6 +28,7 @@ class StravaApi:
         creds = yml['StravaApi']['credentials']
         self.clientId = creds['client_id']
         self.clientSecret = creds['client_secret']
+        self.directory = yml['StravaApi']['activity_directory']
 
 
     def authorize(self, oauth):
@@ -48,62 +50,114 @@ class StravaApi:
                                            , headers=tokenParams)
         return oauthToken
 
-    def post(self, url, payload, files=None):
-        return requests.post(url, headers=self.headers, data=payload, files=files)
-
-    def get(self, url):
-        return requests.get(url, headers=self.headers)
-
 
     def createActivity(self, name, type, startDate, elapsedTime, distance, description="", trainer=0, commute=0):
         url = self.baseUrl + '/activities'
-        payload = {
-                   'name' : name
-                 , 'type' : type
-                 , 'start_date_local' : startDate
-                 , 'elapsed_time' : elapsedTime
-                 , 'description' : description
-                 , 'distance' : distance
-                 , 'trainer' : trainer
-                 , 'photo_ids' : ''
+        payload = {'name' : name \
+                 , 'type' : type \
+                 , 'start_date_local' : startDate \
+                 , 'elapsed_time' : elapsedTime \
+                 , 'description' : description \
+                 , 'distance' : distance \
+                 , 'trainer' : trainer \
+                 , 'photo_ids' : '' \
                  , 'commute' : commute}
 
-        return self.post(url, payload)
+        return self.oauth.request('POST', url, payload)
 
 
     def getAthlete(self ):
         url = self.baseUrl + '/athlete'
-        return self.get(url)
+        return self.oauth.request('GET', url)
 
-    def uploadActivity(self, file, name, description, activity_type, trainer=0, commute=0, data_type='gpx', externalId=0):
+    def uploadActivity(self, file, name, description="", activity_type="run", trainer=0, commute=0, data_type='gpx', externalId=0):
         url = self.baseUrl + "/uploads"
         payload = {'activity_type' : activity_type, 'data_type' : data_type}
         currentHeader = {"Authorization": "Bearer " + self.token['access_token']}
 
         with open(file, 'rb') as f:
             files = {'file' : f}
-            result = self.oath.request('POST', url, headers=currentHeader, data=payload, files=files)
+            result = self.oauth.request('POST', url, headers=currentHeader, data=payload, files=files)
 
         return result.json()["id"]
 
     def getUploadStatus(self, id):
         url = self.baseUrl + "/uploads/" + str(id)
-        response = self.get(url)
-        return response
+        response = self.oauth.request('GET', url)
+        return response.json()
+
+    def waitForUploadComplete(self, id):
+        response = self.getUploadStatus(id)
+        counter = 0;
+        while (response['status'] != 'Your activity is ready.') and (counter < 10):
+            time.sleep(1)
+            response = self.getUploadStatus(id)
+            print(response)
+            print('\n\r')
+            counter += 1
+
+    def uploadActivitiesFromDirectory(self):
+        for filename in os.listdir(self.directory):
+            if filename.endswith('.gpx'):
+                currentAbsPath = self.directory + "/" + filename
+                activityType = self.findActivityType(currentAbsPath)
+                id = self.uploadActivity(currentAbsPath, filename, activity_type=activityType)
+                self.waitForUploadComplete(id)
+
+
+    def findActivityType(self, file):
+        with open(file) as f:
+            parsed = xmltodict.parse(f.read())
+            activityString = parsed['gpx']['trk']['name']
+
+        return self.translateRunkeeperActivityToStrava(activityString)
+
+
+    def translateRunkeeperActivityToStrava(self, activityString):
+        result = ""
+        if 'Running' in activityString:
+            result = "run"
+        elif 'Walking' in activityString:
+            result = "walk"
+
+        return result
+
+
+def checkUser(api):
+    athleteResponse = api.getAthlete()
+    if athleteResponse.status_code == 200:
+        jsonResp = athleteResponse.json()
+        userName = jsonResp['username']
+        firstName = jsonResp['firstname']
+        lastName = jsonResp['lastname']
+        city = jsonResp['city']
+        country = jsonResp['country']
+        sex = 'Male' if jsonResp['sex'] is 'M' else 'Female'
+
+        print('Welcome to my StravaApi!')
+        print('Name: ' + firstName + " " + lastName)
+        print('Username: ' + userName)
+        print('Gender: ' + sex)
+        print("City: " + city)
+        print("Country: " + country)
+        print("Is this you? ")
+        yes = input("Yes/No: ").lower()
+
+        return True if yes == 'yes' or yes == 'y' else False
+    else:
+        print("Failed to fetch athlete.")
+        return False
 
 
 
 def main():
     api = StravaApi()
-    filePath = "c:/Users/antonn/source/repos/StravaApiRepo/2014-03-18-174929.gpx"
-    uploadResId = api.uploadActivity(filePath, "Test", "First test of uploading gpx file", "run", data_type='gpx')
+    if(checkUser(api)):
+        api.uploadActivitiesFromDirectory()
+    else:
+        print("User not ok.")
 
-    response = api.getUploadStatus(uploadResId).json()
-    while(response['status'] != "Your activity is ready."):
-        time.sleep(3)
-        response = api.getUploadStatus(uploadResId).json()
-        print(response)
-        print('\n\r')
+
 
 if __name__ == "__main__":
     main()

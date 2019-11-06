@@ -1,4 +1,5 @@
 StravaApi:
 	credentials:
-		client_id: 
-		client_secret: 
+		client_id:
+		client_secret:
+    activity_directory:

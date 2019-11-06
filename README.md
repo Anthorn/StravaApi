@@ -1,6 +1,8 @@
 # StravaApi
 Small python api with the intention to upload activities to Strava
 
+The code is developed and tested with Microsoft Visual Studio 2017. 
+
 ##
 Before you start using the api make sure to do the following:
 

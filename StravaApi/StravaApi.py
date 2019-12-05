@@ -4,51 +4,67 @@ import yaml
 import time
 import os
 import xmltodict
+import sys
+from PyQt5.QtCore import *
+from PyQt5.QtCore import (Qt, pyqtSignal)
 
-class StravaApi:
+class StravaApi(QObject):
 
-    def __init__(self):
+    apiMessage = pyqtSignal(str)
+
+    def __init__(self, startWithGui=False):
+        super(QObject, self).__init__()
         self.baseUrl = 'https://www.strava.com/api/v3'
         self.clientId = 0
         self.clientSecret = ''
         self.directory = ''
-        self.readConfig()
+        if not startWithGui:
+            self.readCredentialsFromConfig()
+
+
+    def readCredentialsFromGui(self, clientId, clientSecret):
+        self.clientId = clientId
+        self.clientSecret = clientSecret
         self.oauth = OAuth2Session(self.clientId, redirect_uri='https://localhost/test', scope='activity:read,activity:write')
-        self.token = self.authorize(self.oauth)
-        self.headers = {"Authorization": "Bearer " + self.token['access_token']}
 
-
-    def readConfig(self):
+    def readCredentialsFromConfig(self):
         yml = ''
         with open("conf.yaml", 'r') as stream:
             try:
                 yml = yaml.safe_load(stream)
             except yaml.YAMLError as exc:
-                print(exc)
+                apiMessage.emit(exc)
         creds = yml['StravaApi']['credentials']
         self.clientId = creds['client_id']
         self.clientSecret = creds['client_secret']
         self.directory = yml['StravaApi']['activity_directory']
 
 
-    def authorize(self, oauth):
 
-        #Request Access
+    def buildAuthUrl(self):
         params = {'approval_prompt':'force', 'response_type' : 'code'}
         url = 'https://www.strava.com/oauth/authorize'
-        authUrl, state = oauth.authorization_url(url, params)
+        authUrl, state = self.oauth.authorization_url(url, params)
 
-        print ('Please go to %s and authorize access.' % authUrl)
-        authorization_response = input('Enter the full code key: ')
+        self.apiMessage.emit('Please go to %s and authorize access.' % authUrl)
+        return authUrl
+
+    def authorize(self, authResponse):
+
+        #Request Access
 
         #Exchange Token
-        tokenParams = { 'grant_type' : 'authorization_code'}
-        oauthToken = oauth.fetch_token('https://www.strava.com/api/v3/oauth/token'
-                                           , include_client_id=self.clientId
-                                           , code=authorization_response
-                                           , client_secret=self.clientSecret
-                                           , headers=tokenParams)
-        return oauthToken
+        try:
+            tokenParams = { 'grant_type' : 'authorization_code'}
+            oauthToken = self.oauth.fetch_token('https://www.strava.com/api/v3/oauth/token'
+                                               , include_client_id=self.clientId
+                                               , code=authResponse
+                                               , client_secret=self.clientSecret
+                                               , headers=tokenParams)
+            self.token = oauthToken
+            self.headers = {"Authorization": "Bearer " + self.token['access_token']}
+        except ValueError as er:
+            self.apiMessage.emit('ValueError' + er)
 
 
     def createActivity(self, name, type, startDate, elapsedTime, distance, description="", trainer=0, commute=0):
@@ -65,8 +81,7 @@ class StravaApi:
 
         return self.oauth.request('POST', url, payload)
 
-
-    def getAthlete(self ):
+    def getAthlete(self):
         url = self.baseUrl + '/athlete'
         return self.oauth.request('GET', url)
 
@@ -92,10 +107,11 @@ class StravaApi:
         while (response['status'] != 'Your activity is ready.') and (counter < 10):
             time.sleep(1)
             response = self.getUploadStatus(id)
-            print(response)
-            print('\n\r')
+            apiMessage.emit(response)
+            apiMessage.emit('\n\r')
             counter += 1
 
+    ## --- Mid level api functions, to be moved to a separate class in the future --- ##
     def uploadActivitiesFromDirectory(self):
         for filename in os.listdir(self.directory):
             if filename.endswith('.gpx'):
@@ -122,44 +138,32 @@ class StravaApi:
 
         return result
 
+    def checkUser(self):
+        athleteResponse = self.getAthlete()
+        if athleteResponse.status_code == 200:
+            jsonResp = athleteResponse.json()
+            userName = jsonResp['username']
+            firstName = jsonResp['firstname']
+            lastName = jsonResp['lastname']
+            city = jsonResp['city']
+            country = jsonResp['country']
+            sex = 'Male' if jsonResp['sex'] is 'M' else 'Female'
 
-def checkUser(api):
-    athleteResponse = api.getAthlete()
-    if athleteResponse.status_code == 200:
-        jsonResp = athleteResponse.json()
-        userName = jsonResp['username']
-        firstName = jsonResp['firstname']
-        lastName = jsonResp['lastname']
-        city = jsonResp['city']
-        country = jsonResp['country']
-        sex = 'Male' if jsonResp['sex'] is 'M' else 'Female'
+            self.apiMessage.emit('Welcome to my StravaApi!')
+            self.apiMessage.emit('Name: ' + firstName + " " + lastName)
+            self.apiMessage.emit('Username: ' + userName)
+            self.apiMessage.emit('Gender: ' + sex)
+            self.apiMessage.emit("City: " + city)
+            self.apiMessage.emit("Country: " + country)
+            self.apiMessage.emit("Is this you? ")
 
-        print('Welcome to my StravaApi!')
-        print('Name: ' + firstName + " " + lastName)
-        print('Username: ' + userName)
-        print('Gender: ' + sex)
-        print("City: " + city)
-        print("Country: " + country)
-        print("Is this you? ")
-        yes = input("Yes/No: ").lower()
+            return True
+        else:
+            apiMessage.emit("Failed to fetch athlete.")
 
-        return True if yes == 'yes' or yes == 'y' else False
-    else:
-        print("Failed to fetch athlete.")
-        return False
-
-
-
-def main():
-    api = StravaApi()
-    if(checkUser(api)):
-        api.uploadActivitiesFromDirectory()
-    else:
-        print("User not ok.")
+            return False
 
 
 
-if __name__ == "__main__":
-    main()
 
 

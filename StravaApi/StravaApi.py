@@ -7,27 +7,27 @@ import xmltodict
 import sys
 from PyQt5.QtCore import *
 from PyQt5.QtCore import (Qt, pyqtSignal)
+from athlete import *
 
 class StravaApi(QObject):
 
     apiMessage = pyqtSignal(str)
+    baseUrl = 'https://www.strava.com/api/v3'
 
     def __init__(self, startWithGui=False):
         super(QObject, self).__init__()
-        self.baseUrl = 'https://www.strava.com/api/v3'
         self.clientId = 0
         self.clientSecret = ''
         self.directory = ''
         if not startWithGui:
-            self.readCredentialsFromConfig()
-
+            _,_ = self.readDefaultCredentialsFromConfig()
 
     def readCredentialsFromGui(self, clientId, clientSecret):
         self.clientId = clientId
         self.clientSecret = clientSecret
         self.oauth = OAuth2Session(self.clientId, redirect_uri='https://localhost/test', scope='activity:read,activity:write')
 
-    def readCredentialsFromConfig(self):
+    def readDefaultCredentialsFromConfig(self):
         yml = ''
         with open("conf.yaml", 'r') as stream:
             try:
@@ -39,7 +39,7 @@ class StravaApi(QObject):
         self.clientSecret = creds['client_secret']
         self.directory = yml['StravaApi']['activity_directory']
 
-
+        return (self.clientId, self.clientSecret)
 
     def buildAuthUrl(self):
         params = {'approval_prompt':'force', 'response_type' : 'code'}
@@ -50,10 +50,6 @@ class StravaApi(QObject):
         return authUrl
 
     def authorize(self, authResponse):
-
-        #Request Access
-
-        #Exchange Token
         try:
             tokenParams = { 'grant_type' : 'authorization_code'}
             oauthToken = self.oauth.fetch_token('https://www.strava.com/api/v3/oauth/token'
@@ -83,6 +79,7 @@ class StravaApi(QObject):
 
     def getAthlete(self):
         url = self.baseUrl + '/athlete'
+
         return self.oauth.request('GET', url)
 
     def uploadActivity(self, file, name, description="", activity_type="run", trainer=0, commute=0, data_type='gpx', externalId=0):
@@ -99,8 +96,17 @@ class StravaApi(QObject):
     def getUploadStatus(self, id):
         url = self.baseUrl + "/uploads/" + str(id)
         response = self.oauth.request('GET', url)
+
         return response.json()
 
+    def getAthleteStats(self, id):
+        url = self.baseUrl + '/athletes/%s/stats' % str(id)
+        payload = {'page' : '1', 'per_page' : '50'}
+        currentHeader = {"Authorization": "Bearer " + self.token['access_token']}
+
+        return self.oauth.request('GET', url, headers=currentHeader, data=payload)
+
+    ## --- Mid level api functions, to be moved to a separate class in the future --- ##
     def waitForUploadComplete(self, id):
         response = self.getUploadStatus(id)
         counter = 0;
@@ -111,7 +117,6 @@ class StravaApi(QObject):
             apiMessage.emit('\n\r')
             counter += 1
 
-    ## --- Mid level api functions, to be moved to a separate class in the future --- ##
     def uploadActivitiesFromDirectory(self):
         for filename in os.listdir(self.directory):
             if filename.endswith('.gpx'):
@@ -137,6 +142,30 @@ class StravaApi(QObject):
             result = "walk"
 
         return result
+
+    def currentAthlete(self):
+        athleteResponse = self.getAthlete()
+        if athleteResponse.status_code == 200:
+            athlete = Athlete(athleteResponse.json())
+
+            return athlete
+        else:
+            return None
+
+    def athleteSummary(self):
+        athlete = self.currentAthlete()
+        athleteStatsResponse = self.getAthleteStats(athlete.id)
+        if athleteStatsResponse.status_code == 200:
+            athlete.addAthleteSummary(athleteStatsResponse.json())
+
+            self.apiMessage.emit("------- Athlete Summary --------")
+            self.apiMessage.emit("---- Running")
+            self.apiMessage.emit("Total running count: %s" % str(athlete.count))
+            self.apiMessage.emit("Total running distance: %s" % str(athlete.distance))
+            self.apiMessage.emit("Total running moving time: %s" % str(athlete.movingTime))
+            self.apiMessage.emit("Total running elapsed time: %s" % str(athlete.elapsedTime))
+            self.apiMessage.emit("Total running elevation gain: %s" % str(athlete.elevationGain))
+
 
     def checkUser(self):
         athleteResponse = self.getAthlete()

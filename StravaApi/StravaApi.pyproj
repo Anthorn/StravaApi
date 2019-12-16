@@ -21,6 +21,9 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="athlete.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="GUI.py">
       <SubType>Code</SubType>
     </Compile>

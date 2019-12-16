@@ -8,6 +8,7 @@ import sys
 class GUI(QObject):
 
     message = pyqtSignal(str)
+    loginOk = False
 
     def __init__(self):
         super(QObject,self).__init__()
@@ -20,9 +21,37 @@ class GUI(QObject):
         self.api.apiMessage.connect(self.writeToLogBox)
 
         # Log in --------
-        userInfoLayout = QVBoxLayout()
-        userInfoLayout.addWidget(QLabel("User info goes here"), Qt.AlignLeft)
+        userInfoLayout = QHBoxLayout()
+        userInfoGridLayout = QGridLayout()
+        funcButtonLayout = QVBoxLayout()
 
+        self.nameLabel = QLabel()
+        self.usernameLabel = QLabel()
+        self.genderLabel = QLabel()
+        self.cityLabel = QLabel()
+        self.countryLabel = QLabel()
+        userInfoGridLayout.addWidget(QLabel("Name: "), 0, 0, Qt.AlignLeft)
+        userInfoGridLayout.addWidget(self.nameLabel, 0, 1, Qt.AlignLeft)
+        userInfoGridLayout.addWidget(QLabel("Username: "), 1, 0, Qt.AlignLeft)
+        userInfoGridLayout.addWidget(self.usernameLabel, 1, 1, Qt.AlignLeft)
+        userInfoGridLayout.addWidget(QLabel("Gender: "), 2, 0, Qt.AlignLeft)
+        userInfoGridLayout.addWidget(self.genderLabel, 2, 1, Qt.AlignLeft)
+        userInfoGridLayout.addWidget(QLabel("City: "), 3, 0, Qt.AlignLeft)
+        userInfoGridLayout.addWidget(self.cityLabel, 3, 1, Qt.AlignLeft)
+        userInfoGridLayout.addWidget(QLabel("Country: "), 4, 0, Qt.AlignLeft)
+        userInfoGridLayout.addWidget(self.countryLabel, 4, 1, Qt.AlignLeft)
+
+        athleteInfo = QPushButton("Fetch Athlete information")
+        athleteInfo.clicked.connect(self.populateAthleteLabels)
+        latestRun = QPushButton("Latest run")
+        summary = QPushButton("Workout summary")
+        summary.clicked.connect(self.onSummaryClicked)
+        funcButtonLayout.addWidget(athleteInfo)
+        funcButtonLayout.addWidget(latestRun)
+        funcButtonLayout.addWidget(summary)
+
+        userInfoLayout.addLayout(userInfoGridLayout)
+        userInfoLayout.addLayout(funcButtonLayout)
 
         # Logger window --------
         loggerGroupBox = self.buildLoggerWindow()
@@ -33,7 +62,11 @@ class GUI(QObject):
 
         self.mainWindow.setLayout(self.mainLayout)
         self.mainWindow.show()
+        self.loginDialog()
 
+
+
+    def loginDialog(self):
         try:
             dialog = QDialog()
             dialog.setWindowTitle("Strava authorization")
@@ -57,7 +90,7 @@ class GUI(QObject):
             if(dialog.exec() == QDialog.Accepted):
                 self.api.authorize(input.text().strip())
                 self.writeToLogBox("Login successful!")
-                self.api.checkUser()
+                loginOk = self.api.checkUser()
         except:
             error = sys.exc_info()[0]
 
@@ -72,10 +105,14 @@ class GUI(QObject):
         self.passEdit = QLineEdit()
         self.passEdit.setEchoMode(QLineEdit.Password)
         credentialButton = QPushButton("Verify Credentials")
+        credentialButton.clicked.connect(self.onCredentialButtonClicked)
         lineLayout.addWidget(self.passEdit, 1,1)
         lineLayout.addWidget(credentialButton, 2, 1)
 
-        credentialButton.clicked.connect(self.onCredentialButtonClicked)
+        credTuple = self.api.readDefaultCredentialsFromConfig()
+        self.clientId.insert(str(credTuple[0]))
+        self.passEdit.insert(str(credTuple[1]))
+
         boxLayout.addItem(lineLayout)
         logInGroupBox.setLayout(boxLayout)
 
@@ -104,6 +141,18 @@ class GUI(QObject):
         self.logBox.moveCursor(QTextCursor.End)
         self.logBox.insertPlainText(message + "\n")
         self.logBox.moveCursor(QTextCursor.End)
+
+    def populateAthleteLabels(self):
+        athleteInfo = self.api.currentAthlete()
+        self.nameLabel.setText(athleteInfo.name)
+        self.usernameLabel.setText(athleteInfo.username)
+        self.genderLabel.setText(athleteInfo.gender)
+        self.cityLabel.setText(athleteInfo.city)
+        self.countryLabel.setText(athleteInfo.country)
+
+    def onSummaryClicked(self):
+        self.api.athleteSummary()
+
 
     def startGui(self):
         self.app.exec_()

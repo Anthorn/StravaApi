@@ -44,6 +44,7 @@ class GUI(QObject):
         athleteInfo = QPushButton("Fetch Athlete information")
         athleteInfo.clicked.connect(self.populateAthleteLabels)
         latestRun = QPushButton("Latest run")
+        latestRun.clicked.connect(self.onGetLatestActivityClicked)
         summary = QPushButton("Workout summary")
         summary.clicked.connect(self.onSummaryClicked)
         funcButtonLayout.addWidget(athleteInfo)
@@ -152,6 +153,9 @@ class GUI(QObject):
 
     def onSummaryClicked(self):
         self.api.athleteSummary()
+
+    def onGetLatestActivityClicked(self):
+        self.api.getLatestActivity()
 
 
     def startGui(self):

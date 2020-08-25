@@ -7,6 +7,7 @@ import xmltodict
 import sys
 from PyQt5.QtCore import *
 from PyQt5.QtCore import (Qt, pyqtSignal)
+
 from athlete import *
 
 class StravaApi(QObject):
@@ -15,10 +16,11 @@ class StravaApi(QObject):
     baseUrl = 'https://www.strava.com/api/v3'
 
     def __init__(self, startWithGui=False):
-        super(QObject, self).__init__()
+        QObject.__init__(self)
         self.clientId = 0
         self.clientSecret = ''
         self.directory = ''
+        self.athlete = None
         if not startWithGui:
             _,_ = self.readDefaultCredentialsFromConfig()
 
@@ -33,7 +35,7 @@ class StravaApi(QObject):
             try:
                 yml = yaml.safe_load(stream)
             except yaml.YAMLError as exc:
-                apiMessage.emit(exc)
+                self.apiMessage.emit(exc)
         creds = yml['StravaApi']['credentials']
         self.clientId = creds['client_id']
         self.clientSecret = creds['client_secret']
@@ -44,7 +46,7 @@ class StravaApi(QObject):
     def buildAuthUrl(self):
         params = {'approval_prompt':'force', 'response_type' : 'code'}
         url = 'https://www.strava.com/oauth/authorize'
-        authUrl, state = self.oauth.authorization_url(url, params)
+        authUrl, _ = self.oauth.authorization_url(url, params)
 
         self.apiMessage.emit('Please go to %s and authorize access.' % authUrl)
         return authUrl
@@ -106,15 +108,24 @@ class StravaApi(QObject):
 
         return self.oauth.request('GET', url, headers=currentHeader, data=payload)
 
+    def listAthleteActivities(self, per_page=None):
+        url = self.baseUrl + '/athlete/activities'
+        payload = {'page' : '1', 'per_page' : per_page if per_page else '30'}
+        current_header = {"Authorization": "Bearer " + self.token['access_token']}
+
+        return self.oauth.request('GET', url, headers=current_header, data=payload)
+
+
+
     ## --- Mid level api functions, to be moved to a separate class in the future --- ##
     def waitForUploadComplete(self, id):
         response = self.getUploadStatus(id)
-        counter = 0;
+        counter = 0
         while (response['status'] != 'Your activity is ready.') and (counter < 10):
             time.sleep(1)
             response = self.getUploadStatus(id)
-            apiMessage.emit(response)
-            apiMessage.emit('\n\r')
+            self.apiMessage.emit(response)
+            self.apiMessage.emit('\n\r')
             counter += 1
 
     def uploadActivitiesFromDirectory(self):
@@ -143,14 +154,17 @@ class StravaApi(QObject):
 
         return result
 
-    def currentAthlete(self):
-        athleteResponse = self.getAthlete()
-        if athleteResponse.status_code == 200:
-            athlete = Athlete(athleteResponse.json())
+    def currentAthlete(self, forceUpdateAthlete=False):
+        if(self.athlete is None or forceUpdateAthlete):
+            athleteResponse = self.getAthlete()
+            if athleteResponse.status_code == 200:
+                self.athlete = Athlete(athleteResponse.json())
 
-            return athlete
+                return self.athlete
+            else:
+                return None
         else:
-            return None
+            return self.athlete
 
     def athleteSummary(self):
         athlete = self.currentAthlete()
@@ -159,12 +173,7 @@ class StravaApi(QObject):
             athlete.addAthleteSummary(athleteStatsResponse.json())
 
             self.apiMessage.emit("------- Athlete Summary --------")
-            self.apiMessage.emit("---- Running")
-            self.apiMessage.emit("Total running count: %s" % str(athlete.count))
-            self.apiMessage.emit("Total running distance: %s" % str(athlete.distance))
-            self.apiMessage.emit("Total running moving time: %s" % str(athlete.movingTime))
-            self.apiMessage.emit("Total running elapsed time: %s" % str(athlete.elapsedTime))
-            self.apiMessage.emit("Total running elevation gain: %s" % str(athlete.elevationGain))
+            self.apiMessage.emit(athlete.runningSummaryStr())
 
 
     def checkUser(self):
@@ -188,10 +197,16 @@ class StravaApi(QObject):
 
             return True
         else:
-            apiMessage.emit("Failed to fetch athlete.")
+            self.apiMessage.emit("Failed to fetch athlete.")
 
             return False
 
+    def getLatestActivity(self):
+        latestActivityResponse = self.listAthleteActivities('1')
+        currentAthlete = self.currentAthlete()
+        currentAthlete.addLatestActivity(latestActivityResponse.json())
+
+        self.apiMessage.emit(currentAthlete.latestActivitySummaryStr())
 
 
 

@@ -5,8 +5,7 @@ import time
 import os
 import xmltodict
 import sys
-from PyQt5.QtCore import *
-from PyQt5.QtCore import (Qt, pyqtSignal)
+from PyQt5.QtCore import (Qt, pyqtSignal, QObject)
 
 from athlete import *
 

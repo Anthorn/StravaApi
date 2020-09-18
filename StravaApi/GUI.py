@@ -47,12 +47,20 @@ class GUI(QObject):
         latestRun.clicked.connect(self.onGetLatestActivityClicked)
         summary = QPushButton("Workout summary")
         summary.clicked.connect(self.onSummaryClicked)
+        uploadActivities = QPushButton("Upload Activities")
+        uploadActivities.clicked.connect(self.onUploadActivitiesClicked)
+
         funcButtonLayout.addWidget(athleteInfo)
         funcButtonLayout.addWidget(latestRun)
         funcButtonLayout.addWidget(summary)
+        funcButtonLayout.addWidget(uploadActivities)
 
         userInfoLayout.addLayout(userInfoGridLayout)
         userInfoLayout.addLayout(funcButtonLayout)
+
+        self.activityDirectoryInputBox = QLineEdit()
+        self.fileModel = QFileSystemModel()
+        self.fileListView = QListView()
 
         # Logger window --------
         loggerGroupBox = self.buildLoggerWindow()
@@ -63,7 +71,8 @@ class GUI(QObject):
 
         self.mainWindow.setLayout(self.mainLayout)
         self.mainWindow.show()
-        self.loginDialog()
+
+        #self.loginDialog()
 
 
 
@@ -156,6 +165,47 @@ class GUI(QObject):
 
     def onGetLatestActivityClicked(self):
         self.api.getLatestActivity()
+
+    def onUploadActivitiesClicked(self):
+        dialog = QDialog()
+        dialog.setMinimumSize(500,500)
+        dialog.setWindowTitle("Upload Activities")
+        layout = QVBoxLayout()
+        inputLayout = QHBoxLayout()
+
+        inputPushButton = QPushButton("...")
+        inputLayout.addWidget(self.activityDirectoryInputBox, Qt.AlignLeft)
+        inputLayout.addWidget(inputPushButton, Qt.AlignRight)
+
+        inputPushButton.clicked.connect(self.openActivityDirectorySelectionDialog)
+
+        layout.addLayout(inputLayout)
+
+        self.fileListView.setModel(self.fileModel)
+        self.fileListView.setRootIndex(self.fileModel.index(QDir.currentPath()))
+
+
+
+        layout.addWidget(self.fileListView)
+        startUploadButton = QPushButton("Upload")
+        layout.addWidget(startUploadButton)
+
+        dialog.setLayout(layout)
+
+        dialog.exec()
+
+    def activityDirSelected(self, directoryStr, model):
+        model.setRootPath(directoryStr)
+
+    def openActivityDirectorySelectionDialog(self):
+        dialog = QFileDialog()
+        dialog.setFileMode(QFileDialog.DirectoryOnly)
+        dirPath = dialog.getExistingDirectory()
+        self.fileModel.setRootPath(dirPath)
+        self.fileListView.setRootIndex(self.fileModel.index(dirPath))
+        self.activityDirectoryInputBox.setText(dirPath)
+
+
 
 
     def startGui(self):

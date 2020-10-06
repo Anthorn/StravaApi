@@ -60,6 +60,8 @@ class GUI(QObject):
 
         self.activityDirectoryInputBox = QLineEdit()
         self.fileModel = QFileSystemModel()
+        self.fileModel.setNameFilters(["*.gpx"])
+        self.fileModel.setNameFilterDisables(False)
         self.fileListView = QListView()
 
         # Logger window --------
@@ -72,7 +74,7 @@ class GUI(QObject):
         self.mainWindow.setLayout(self.mainLayout)
         self.mainWindow.show()
 
-        #self.loginDialog()
+        self.loginDialog()
 
 
 
@@ -109,14 +111,14 @@ class GUI(QObject):
         boxLayout = QHBoxLayout()
         lineLayout = QGridLayout()
         self.clientId = QLineEdit()
-        lineLayout.addWidget(QLabel("Client Id: "), 0,0)
+        lineLayout.addWidget(QLabel("Client Id: "), 0, 0)
         lineLayout.addWidget(self.clientId, 0,1)
-        lineLayout.addWidget(QLabel("Client Secret: "), 1,0)
+        lineLayout.addWidget(QLabel("Client Secret: "), 1, 0)
         self.passEdit = QLineEdit()
         self.passEdit.setEchoMode(QLineEdit.Password)
         credentialButton = QPushButton("Verify Credentials")
         credentialButton.clicked.connect(self.onCredentialButtonClicked)
-        lineLayout.addWidget(self.passEdit, 1,1)
+        lineLayout.addWidget(self.passEdit, 1, 1)
         lineLayout.addWidget(credentialButton, 2, 1)
 
         credTuple = self.api.readDefaultCredentialsFromConfig()
@@ -167,13 +169,23 @@ class GUI(QObject):
         self.api.getLatestActivity()
 
     def onUploadActivitiesClicked(self):
+        startUploadButton = QPushButton("Upload")
         dialog = QDialog()
-        dialog.setMinimumSize(500,500)
+        box = QDialogButtonBox(dialog)
+        box.addButton("Upload", QDialogButtonBox.AcceptRole)
+        box.addButton("Cancel", QDialogButtonBox.RejectRole)
+
+        box.accepted.connect(dialog.accept)
+        box.rejected.connect(dialog.reject)
+        dialog.setMinimumSize(500, 500)
         dialog.setWindowTitle("Upload Activities")
         layout = QVBoxLayout()
         inputLayout = QHBoxLayout()
 
+        label = QLabel("Location: ")
         inputPushButton = QPushButton("...")
+        inputPushButton.setMaximumWidth(30)
+        inputLayout.addWidget(label, Qt.AlignLeft)
         inputLayout.addWidget(self.activityDirectoryInputBox, Qt.AlignLeft)
         inputLayout.addWidget(inputPushButton, Qt.AlignRight)
 
@@ -184,15 +196,17 @@ class GUI(QObject):
         self.fileListView.setModel(self.fileModel)
         self.fileListView.setRootIndex(self.fileModel.index(QDir.currentPath()))
 
-
-
         layout.addWidget(self.fileListView)
-        startUploadButton = QPushButton("Upload")
-        layout.addWidget(startUploadButton)
+        layout.addWidget(box)
 
         dialog.setLayout(layout)
 
-        dialog.exec()
+        conclusion = dialog.exec()
+
+        if conclusion == QDialog.Accepted:
+            self.api.uploadActivitiesFromDirectory(self.fileModel.rootPath())
+
+
 
     def activityDirSelected(self, directoryStr, model):
         model.setRootPath(directoryStr)
@@ -201,10 +215,10 @@ class GUI(QObject):
         dialog = QFileDialog()
         dialog.setFileMode(QFileDialog.DirectoryOnly)
         dirPath = dialog.getExistingDirectory()
+
         self.fileModel.setRootPath(dirPath)
         self.fileListView.setRootIndex(self.fileModel.index(dirPath))
         self.activityDirectoryInputBox.setText(dirPath)
-
 
 
 

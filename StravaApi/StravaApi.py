@@ -123,14 +123,14 @@ class StravaApi(QObject):
         while (response['status'] != 'Your activity is ready.') and (counter < 10):
             time.sleep(1)
             response = self.getUploadStatus(id)
-            self.apiMessage.emit(response)
+            self.apiMessage.emit(response['status'])
             self.apiMessage.emit('\n\r')
             counter += 1
 
-    def uploadActivitiesFromDirectory(self):
-        for filename in os.listdir(self.directory):
+    def uploadActivitiesFromDirectory(self, directory):
+        for filename in os.listdir(directory):
             if filename.endswith('.gpx'):
-                currentAbsPath = self.directory + "/" + filename
+                currentAbsPath = directory + "/" + filename
                 activityType = self.findActivityType(currentAbsPath)
                 id = self.uploadActivity(currentAbsPath, filename, activity_type=activityType)
                 self.waitForUploadComplete(id)

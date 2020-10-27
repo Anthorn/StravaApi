@@ -1,6 +1,5 @@
-from GUI import *
 import sys
-import os
+from MainWindow import MainWindow
 
 def main():
 
@@ -11,10 +10,10 @@ def main():
     #    print("User not ok.")
     try:
 
-        gui = GUI()
+        gui = MainWindow()
         gui.startGui()
-    except:
-        print ("Unexpected error: ", sys.exc_info()[0])
+    except ValueError:
+        print("Unexpected error: ", sys.exc_info()[0])
 
 
 if __name__ == "__main__":
